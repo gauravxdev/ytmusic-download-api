@@ -2,6 +2,8 @@
 
 This is a Python Flask REST API for searching YouTube Music and getting streaming URLs. It uses `ytmusicapi` for searching and `pytubefix` for handling streaming URLs with signature cipher decryption.
 
+**Note:** Search functionality may be limited on cloud hosting platforms due to YouTube API restrictions. The `/stream/{video_id}` endpoint works reliably for known video IDs.
+
 ## Installation
 
 1. Navigate to the project directory:
@@ -41,6 +43,13 @@ The app automatically uses the `PORT` environment variable set by the hosting pl
 **Health Check:**
 The `/health` endpoint can be used for monitoring and health checks.
 
+## Video ID Formats
+
+The API accepts various YouTube video ID formats:
+- Standard YouTube video IDs: `dQw4w9WgXcQ`
+- YouTube Music prefixed IDs: `MUSIC_VIDEO_ID_dQw4w9WgXcQ`
+- The API automatically validates and converts IDs to the correct format
+
 ## Endpoints
 
 ### 1. Search and Get Streaming URL
@@ -78,6 +87,14 @@ Searches for a song on YouTube Music and returns the best quality streaming URL 
 }
 ```
 
+**Response (503 Service Unavailable) - When YouTube blocks search:**
+```json
+{
+  "error": "Search temporarily unavailable due to YouTube API restrictions on this server. Please use /stream/{video_id} endpoint with known video IDs.",
+  "code": "SEARCH_BLOCKED"
+}
+```
+
 ### 2. Get Streaming URL by Video ID
 **Endpoint:** `GET /stream/<video_id>`
 
@@ -104,6 +121,11 @@ Gets streaming URLs and audio formats for a specific YouTube video ID.
   "all_formats": [...]
 }
 ```
+
+**Error Responses:**
+- `400 Bad Request` - Invalid video ID format
+- `404 Not Found` - Video not found or no audio streams available
+- `500 Internal Server Error` - Stream extraction failed
 ### 3. Get DASH Audio Streams
 **Endpoint:** `GET /dash/<video_id>`
 
@@ -133,6 +155,11 @@ Gets DASH audio streams for a specific YouTube video ID. DASH streams allow adap
   ]
 }
 ```
+
+**Error Responses:**
+- `400 Bad Request` - Invalid video ID format
+- `404 Not Found` - Video not found or no audio streams available
+- `500 Internal Server Error` - Stream extraction failed
 
 ### 3. Get DASH Audio Streams
 

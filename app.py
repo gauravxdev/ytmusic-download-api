@@ -26,23 +26,37 @@ def search_and_get_stream_fixed(song_name, artist_name=""):
     """
     start_time = time.time()
     
-    # Initialize YouTube Music API with proper location
-    ytmusic = YTMusic(language='en', location='IN')
+    # Initialize YouTube Music API
+    try:
+        ytmusic = YTMusic(language='en', location='IN')
+    except Exception as init_error:
+        logger.error(f"YTMusic initialization failed: {str(init_error)}")
+        return None
     
     # Search for the song
     search_start = time.time()
     search_query = f"{song_name} {artist_name}".strip()
     
     try:
+        # Try search with timeout and error handling
+        import requests
+        # Set a timeout for the request
         search_results = ytmusic.search(search_query, filter="songs", limit=5)
         search_time = time.time() - search_start
 
         if not search_results:
             logger.error(f"No search results found for: {search_query}")
             return None
+    except requests.exceptions.Timeout:
+        logger.error(f"Search timeout for '{search_query}'")
+        return {"error": "Search request timed out. Please use /stream/{video_id} endpoint with known video IDs.", "code": "SEARCH_TIMEOUT"}
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Search network error for '{search_query}': {str(e)}")
+        return {"error": "Search temporarily unavailable due to YouTube API restrictions on this server. Please use /stream/{video_id} endpoint with known video IDs.", "code": "SEARCH_BLOCKED"}
     except Exception as e:
         logger.error(f"Search failed for '{search_query}': {str(e)}")
-        return None
+        # Return a more helpful error for client
+        return {"error": "Search temporarily unavailable due to YouTube API restrictions on this server. Please use /stream/{video_id} endpoint with known video IDs.", "code": "SEARCH_BLOCKED"}
     
     # Get the first result
     first_result = search_results[0]
@@ -100,21 +114,65 @@ def search_and_get_stream_fixed(song_name, artist_name=""):
     
     return None
 
+def validate_and_convert_video_id(video_id):
+    """
+    Validate video ID and attempt to convert browseId to videoId if needed
+    """
+    if not video_id or len(video_id) < 10:
+        return None
+
+    # If it looks like a standard video ID (11 characters, alphanumeric + dashes/underscores)
+    if len(video_id) == 11 and video_id.replace('_', '').replace('-', '').isalnum():
+        return video_id
+
+    # If it starts with browseId or other YouTube Music specific prefixes, try to extract video ID
+    if video_id.startswith('MUSIC_VIDEO_ID_'):
+        # Remove prefix if present
+        clean_id = video_id.replace('MUSIC_VIDEO_ID_', '')
+        if len(clean_id) == 11:
+            return clean_id
+
+    # For other cases, try to use it as-is but log a warning
+    logger.warning(f"Potentially invalid video ID format: {video_id}")
+    return video_id
+
 def get_stream_by_id(video_id):
     """
     Get streaming data and all audio formats for a specific video ID
     """
     try:
-        youtube_url = f"https://music.youtube.com/watch?v={video_id}"
-        yt = YouTube(youtube_url)
-        
+        # Validate and convert video ID
+        clean_video_id = validate_and_convert_video_id(video_id)
+        if not clean_video_id:
+            return {"error": "Invalid video ID format", "code": "INVALID_ID"}
+
+        # Try both music.youtube.com and regular youtube.com
+        urls_to_try = [
+            f"https://music.youtube.com/watch?v={clean_video_id}",
+            f"https://www.youtube.com/watch?v={clean_video_id}"
+        ]
+
+        yt = None
+        for url in urls_to_try:
+            try:
+                yt = YouTube(url)
+                # Check if video exists and is accessible
+                if yt.title and yt.title != "YouTube":
+                    break
+            except Exception as url_error:
+                logger.warning(f"Failed to load from {url}: {str(url_error)}")
+                continue
+
+        if not yt or not yt.title or yt.title == "YouTube":
+            return {"error": "Video not found or not accessible", "code": "VIDEO_NOT_FOUND"}
+
         audio_streams = yt.streams.filter(only_audio=True)
-        
+
         if not audio_streams:
-            return None
-        
+            return {"error": "No audio streams available for this video", "code": "NO_AUDIO_STREAMS"}
+
         best_audio = audio_streams.order_by('abr').desc().first()
-        
+
         audio_formats = []
         for stream in audio_streams:
             audio_formats.append({
@@ -125,9 +183,9 @@ def get_stream_by_id(video_id):
                 'url': stream.url,
                 'filesize': stream.filesize,
             })
-        
+
         return {
-            'video_id': video_id,
+            'video_id': clean_video_id,
             'title': yt.title,
             'duration': yt.length,
             'thumbnail': yt.thumbnail_url,
@@ -140,17 +198,40 @@ def get_stream_by_id(video_id):
             },
             'all_formats': audio_formats
         }
-    
+
     except Exception as e:
-        return None
+        logger.error(f"Error getting streams for video {video_id}: {str(e)}")
+        return {"error": f"Failed to get streams: {str(e)}", "code": "STREAM_ERROR"}
 def get_dash_audio(video_id):
     """
     Get DASH audio streams for a specific video ID
     """
     try:
-        youtube_url = f"https://music.youtube.com/watch?v={video_id}"
-        yt = YouTube(youtube_url)
-        
+        # Validate and convert video ID
+        clean_video_id = validate_and_convert_video_id(video_id)
+        if not clean_video_id:
+            return {"error": "Invalid video ID format", "code": "INVALID_ID"}
+
+        # Try both music.youtube.com and regular youtube.com
+        urls_to_try = [
+            f"https://music.youtube.com/watch?v={clean_video_id}",
+            f"https://www.youtube.com/watch?v={clean_video_id}"
+        ]
+
+        yt = None
+        for url in urls_to_try:
+            try:
+                yt = YouTube(url)
+                # Check if video exists and is accessible
+                if yt.title and yt.title != "YouTube":
+                    break
+            except Exception as url_error:
+                logger.warning(f"Failed to load from {url}: {str(url_error)}")
+                continue
+
+        if not yt or not yt.title or yt.title == "YouTube":
+            return {"error": "Video not found or not accessible", "code": "VIDEO_NOT_FOUND"}
+
         # Try to get DASH streams (adaptive audio)
         dash_audio_streams = yt.streams.filter(only_audio=True, adaptive=True)
         if not dash_audio_streams:
@@ -158,9 +239,8 @@ def get_dash_audio(video_id):
             dash_audio_streams = yt.streams.filter(only_audio=True)
 
         if not dash_audio_streams:
-            logger.error(f"No DASH audio streams found for video: {video_id}")
-            return None
-        
+            return {"error": "No audio streams available for this video", "code": "NO_AUDIO_STREAMS"}
+
         dash_formats = []
         for stream in dash_audio_streams:
             dash_formats.append({
@@ -171,17 +251,18 @@ def get_dash_audio(video_id):
                 'url': stream.url,
                 'filesize': stream.filesize,
             })
-        
+
         return {
-            'video_id': video_id,
+            'video_id': clean_video_id,
             'title': yt.title,
             'duration': yt.length,
             'thumbnail': yt.thumbnail_url,
             'dash_audio_streams': dash_formats
         }
-    
+
     except Exception as e:
-        return None
+        logger.error(f"Error getting DASH streams for video {video_id}: {str(e)}")
+        return {"error": f"Failed to get DASH streams: {str(e)}", "code": "STREAM_ERROR"}
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -204,6 +285,8 @@ def search_and_stream():
     
     result = search_and_get_stream_fixed(song_name, artist_name)
     if result:
+        if "error" in result and result.get("code") == "SEARCH_BLOCKED":
+            return jsonify(result), 503  # Service Unavailable
         return jsonify(result)
     else:
         return jsonify({'error': 'Song not found'}), 404
@@ -211,15 +294,35 @@ def search_and_stream():
 @app.route('/stream/<video_id>', methods=['GET'])
 def stream_by_id(video_id):
     result = get_stream_by_id(video_id)
-    if result:
+    if result and "error" not in result:
         return jsonify(result)
+    elif result and "code" in result:
+        # Return specific error codes
+        if result["code"] == "INVALID_ID":
+            return jsonify(result), 400
+        elif result["code"] == "VIDEO_NOT_FOUND":
+            return jsonify(result), 404
+        elif result["code"] == "NO_AUDIO_STREAMS":
+            return jsonify(result), 404
+        else:
+            return jsonify(result), 500
     else:
         return jsonify({'error': 'Video not found or no audio streams available'}), 404
 @app.route('/dash/<video_id>', methods=['GET'])
 def dash_audio(video_id):
     result = get_dash_audio(video_id)
-    if result:
+    if result and "error" not in result:
         return jsonify(result)
+    elif result and "code" in result:
+        # Return specific error codes
+        if result["code"] == "INVALID_ID":
+            return jsonify(result), 400
+        elif result["code"] == "VIDEO_NOT_FOUND":
+            return jsonify(result), 404
+        elif result["code"] == "NO_AUDIO_STREAMS":
+            return jsonify(result), 404
+        else:
+            return jsonify(result), 500
     else:
         return jsonify({'error': 'Video not found or no DASH audio streams available'}), 404
 
