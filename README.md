@@ -25,19 +25,21 @@ python app.py
 The API will run on `http://localhost:5000` by default.
 
 ### Production
-For production deployment, use a WSGI server like Gunicorn:
-```bash
-pip install gunicorn
-gunicorn --bind 0.0.0.0:8000 app:app
+For production deployment on platforms like Render, Railway, or Heroku:
+
+**Start Command:**
+```
+gunicorn app:app
 ```
 
-Set environment variables for host and port:
-```bash
-export HOST=0.0.0.0
-export PORT=8000
-```
+The app automatically uses the `PORT` environment variable set by the hosting platform.
 
-The health check endpoint `/health` can be used for monitoring.
+**Environment Variables:**
+- `PORT` - Automatically set by hosting platform
+- `HOST` - Defaults to `0.0.0.0`
+
+**Health Check:**
+The `/health` endpoint can be used for monitoring and health checks.
 
 ## Endpoints
 
