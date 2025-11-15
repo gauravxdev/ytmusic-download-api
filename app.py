@@ -26,17 +26,22 @@ def search_and_get_stream_fixed(song_name, artist_name=""):
     """
     start_time = time.time()
     
-    # Initialize YouTube Music API
-    ytmusic = YTMusic()
+    # Initialize YouTube Music API with proper location
+    ytmusic = YTMusic(language='en', location='IN')
     
     # Search for the song
     search_start = time.time()
     search_query = f"{song_name} {artist_name}".strip()
     
-    search_results = ytmusic.search(search_query, filter="songs", limit=5)
-    search_time = time.time() - search_start
-    
-    if not search_results:
+    try:
+        search_results = ytmusic.search(search_query, filter="songs", limit=5)
+        search_time = time.time() - search_start
+
+        if not search_results:
+            logger.error(f"No search results found for: {search_query}")
+            return None
+    except Exception as e:
+        logger.error(f"Search failed for '{search_query}': {str(e)}")
         return None
     
     # Get the first result
@@ -146,9 +151,14 @@ def get_dash_audio(video_id):
         youtube_url = f"https://music.youtube.com/watch?v={video_id}"
         yt = YouTube(youtube_url)
         
+        # Try to get DASH streams (adaptive audio)
         dash_audio_streams = yt.streams.filter(only_audio=True, adaptive=True)
-        
         if not dash_audio_streams:
+            # Fallback: try progressive streams that might be DASH-like
+            dash_audio_streams = yt.streams.filter(only_audio=True)
+
+        if not dash_audio_streams:
+            logger.error(f"No DASH audio streams found for video: {video_id}")
             return None
         
         dash_formats = []
