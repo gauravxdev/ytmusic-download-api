@@ -10,9 +10,7 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Set your Cloudflare Worker proxy URL here!
 WORKER_BASE = "https://ytmusic-dl.api-app.workers.dev"
-
 def get_proxied_url(url):
     return f"{WORKER_BASE}?url={url}"
 
@@ -45,7 +43,7 @@ def search_and_get_stream(song_name, artist_name=""):
         return {"error": "No videoId found"}, 404
     try:
         proxy_url = get_proxied_url(f"https://music.youtube.com/watch?v={video_id}")
-        yt_obj = YouTube(proxy_url)
+        yt_obj = YouTube(proxy_url, 'ANDROID')
         audio_streams = yt_obj.streams.filter(only_audio=True).order_by('abr').desc()
         if not audio_streams:
             return {"error": "No audio stream"}, 404
@@ -70,6 +68,8 @@ def search_and_get_stream(song_name, artist_name=""):
             } for stream in audio_streams]
         }
     except Exception as e:
+        if "BotDetection" in str(e):
+            return {"error": "Video request flagged as bot traffic. Automatic PO token failed. Try again later or with another video."}, 429
         logger.error(f"Stream error: {str(e)}")
         return {"error": "Stream failed", "details": str(e)}, 500
 
@@ -89,15 +89,14 @@ def get_stream_by_id(video_id):
     clean_video_id = validate_and_convert_video_id(video_id)
     if not clean_video_id:
         return {"error": "Invalid video ID format", "code": "INVALID_ID"}, 400
-    # Try YouTube Music, then fallback to regular YouTube
     urls_to_try = [
-        f"https://music.youtube.com/watch?v={clean_video_id}",
-        f"https://www.youtube.com/watch?v={clean_video_id}"
+        (f"https://music.youtube.com/watch?v={clean_video_id}", 'ANDROID'),
+        (f"https://www.youtube.com/watch?v={clean_video_id}", 'WEB')
     ]
     yt = None
-    for url in urls_to_try:
+    for url, client in urls_to_try:
         try:
-            yt = YouTube(get_proxied_url(url))
+            yt = YouTube(get_proxied_url(url), client)
             if yt.title and yt.title != "YouTube":
                 break
         except Exception as url_error:
@@ -136,13 +135,13 @@ def get_dash_audio(video_id):
     if not clean_video_id:
         return {"error": "Invalid video ID format", "code": "INVALID_ID"}, 400
     urls_to_try = [
-        f"https://music.youtube.com/watch?v={clean_video_id}",
-        f"https://www.youtube.com/watch?v={clean_video_id}"
+        (f"https://music.youtube.com/watch?v={clean_video_id}", 'ANDROID'),
+        (f"https://www.youtube.com/watch?v={clean_video_id}", 'WEB')
     ]
     yt = None
-    for url in urls_to_try:
+    for url, client in urls_to_try:
         try:
-            yt = YouTube(get_proxied_url(url))
+            yt = YouTube(get_proxied_url(url), client)
             if yt.title and yt.title != "YouTube":
                 break
         except Exception as url_error:
