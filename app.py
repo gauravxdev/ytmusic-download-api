@@ -10,6 +10,12 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Set your Cloudflare Worker proxy URL here!
+WORKER_BASE = "https://ytmusic-dl.api-app.workers.dev"
+
+def get_proxied_url(url):
+    return f"{WORKER_BASE}?url={url}"
+
 try:
     ytmusic = YTMusic(language='en', location='IN')
 except Exception as e:
@@ -31,14 +37,15 @@ def yt_search(song_name, artist_name=""):
 
 def search_and_get_stream(song_name, artist_name=""):
     results = yt_search(song_name, artist_name)
-    if isinstance(results, tuple):  # error case from yt_search
+    if isinstance(results, tuple):
         return results[0], results[1]
     first = results[0]
     video_id = first.get('videoId')
     if not video_id:
         return {"error": "No videoId found"}, 404
     try:
-        yt_obj = YouTube(f"https://music.youtube.com/watch?v={video_id}")
+        proxy_url = get_proxied_url(f"https://music.youtube.com/watch?v={video_id}")
+        yt_obj = YouTube(proxy_url)
         audio_streams = yt_obj.streams.filter(only_audio=True).order_by('abr').desc()
         if not audio_streams:
             return {"error": "No audio stream"}, 404
@@ -53,6 +60,14 @@ def search_and_get_stream(song_name, artist_name=""):
             "bitrate": best_audio.bitrate,
             "codec": best_audio.mime_type,
             "duration": yt_obj.length,
+            "all_formats": [{
+                "itag": stream.itag,
+                "quality": stream.abr,
+                "bitrate": stream.bitrate,
+                "codec": stream.mime_type,
+                "url": stream.url,
+                "filesize": stream.filesize,
+            } for stream in audio_streams]
         }
     except Exception as e:
         logger.error(f"Stream error: {str(e)}")
@@ -74,6 +89,7 @@ def get_stream_by_id(video_id):
     clean_video_id = validate_and_convert_video_id(video_id)
     if not clean_video_id:
         return {"error": "Invalid video ID format", "code": "INVALID_ID"}, 400
+    # Try YouTube Music, then fallback to regular YouTube
     urls_to_try = [
         f"https://music.youtube.com/watch?v={clean_video_id}",
         f"https://www.youtube.com/watch?v={clean_video_id}"
@@ -81,7 +97,7 @@ def get_stream_by_id(video_id):
     yt = None
     for url in urls_to_try:
         try:
-            yt = YouTube(url)
+            yt = YouTube(get_proxied_url(url))
             if yt.title and yt.title != "YouTube":
                 break
         except Exception as url_error:
@@ -126,7 +142,7 @@ def get_dash_audio(video_id):
     yt = None
     for url in urls_to_try:
         try:
-            yt = YouTube(url)
+            yt = YouTube(get_proxied_url(url))
             if yt.title and yt.title != "YouTube":
                 break
         except Exception as url_error:
