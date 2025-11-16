@@ -4,6 +4,10 @@ This is a Python Flask REST API for searching YouTube Music and getting streamin
 
 **Note:** Search functionality may be limited on cloud hosting platforms due to YouTube API restrictions. The `/stream/{video_id}` endpoint works reliably for known video IDs.
 
+**PO Token:** For production deployments, set the `PO_TOKEN` environment variable to bypass YouTube's bot detection. The API also supports automatic PO token generation as a fallback. See pytubefix documentation for obtaining PO tokens.
+
+**Alternative Solutions:** If PO tokens don't work, consider using yt-dlp as a backend or implementing client-side streaming with the YouTube IFrame Player API.
+
 ## Installation
 
 1. Navigate to the project directory:
@@ -39,6 +43,7 @@ The app automatically uses the `PORT` environment variable set by the hosting pl
 **Environment Variables:**
 - `PORT` - Automatically set by hosting platform
 - `HOST` - Defaults to `0.0.0.0`
+- `PO_TOKEN` - (Optional) PO Token for bypassing YouTube bot detection. See pytubefix documentation for how to obtain.
 
 **Health Check:**
 The `/health` endpoint can be used for monitoring and health checks.
