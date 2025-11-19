@@ -10,9 +10,6 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-WORKER_BASE = "https://ytmusic-dl.api-app.workers.dev"
-def get_proxied_url(url):
-    return f"{WORKER_BASE}?url={url}"
 
 try:
     ytmusic = YTMusic(language='en', location='IN')
@@ -42,8 +39,8 @@ def search_and_get_stream(song_name, artist_name=""):
     if not video_id:
         return {"error": "No videoId found"}, 404
     try:
-        proxy_url = get_proxied_url(f"https://music.youtube.com/watch?v={video_id}")
-        yt_obj = YouTube(proxy_url, 'ANDROID')
+        youtube_url = f"https://music.youtube.com/watch?v={video_id}"
+        yt_obj = YouTube(youtube_url)
         audio_streams = yt_obj.streams.filter(only_audio=True).order_by('abr').desc()
         if not audio_streams:
             return {"error": "No audio stream"}, 404
@@ -89,19 +86,13 @@ def get_stream_by_id(video_id):
     clean_video_id = validate_and_convert_video_id(video_id)
     if not clean_video_id:
         return {"error": "Invalid video ID format", "code": "INVALID_ID"}, 400
-    urls_to_try = [
-        (f"https://music.youtube.com/watch?v={clean_video_id}", 'ANDROID'),
-        (f"https://www.youtube.com/watch?v={clean_video_id}", 'WEB')
-    ]
-    yt = None
-    for url, client in urls_to_try:
-        try:
-            yt = YouTube(get_proxied_url(url), client)
-            if yt.title and yt.title != "YouTube":
-                break
-        except Exception as url_error:
-            logger.warning(f"Failed to load from {url}: {str(url_error)}")
-    if not yt or not yt.title or yt.title == "YouTube":
+    try:
+        youtube_url = f"https://music.youtube.com/watch?v={clean_video_id}"
+        yt = YouTube(youtube_url)
+        if not yt.title or yt.title == "YouTube":
+            return {"error": "Video not found or not accessible", "code": "VIDEO_NOT_FOUND"}, 404
+    except Exception as e:
+        logger.error(f"Failed to load video: {str(e)}")
         return {"error": "Video not found or not accessible", "code": "VIDEO_NOT_FOUND"}, 404
     audio_streams = yt.streams.filter(only_audio=True)
     if not audio_streams:
@@ -134,19 +125,13 @@ def get_dash_audio(video_id):
     clean_video_id = validate_and_convert_video_id(video_id)
     if not clean_video_id:
         return {"error": "Invalid video ID format", "code": "INVALID_ID"}, 400
-    urls_to_try = [
-        (f"https://music.youtube.com/watch?v={clean_video_id}", 'ANDROID'),
-        (f"https://www.youtube.com/watch?v={clean_video_id}", 'WEB')
-    ]
-    yt = None
-    for url, client in urls_to_try:
-        try:
-            yt = YouTube(get_proxied_url(url), client)
-            if yt.title and yt.title != "YouTube":
-                break
-        except Exception as url_error:
-            logger.warning(f"Failed to load from {url}: {str(url_error)}")
-    if not yt or not yt.title or yt.title == "YouTube":
+    try:
+        youtube_url = f"https://music.youtube.com/watch?v={clean_video_id}"
+        yt = YouTube(youtube_url)
+        if not yt.title or yt.title == "YouTube":
+            return {"error": "Video not found or not accessible", "code": "VIDEO_NOT_FOUND"}, 404
+    except Exception as e:
+        logger.error(f"Failed to load video: {str(e)}")
         return {"error": "Video not found or not accessible", "code": "VIDEO_NOT_FOUND"}, 404
     dash_audio_streams = yt.streams.filter(only_audio=True, adaptive=True)
     if not dash_audio_streams:
