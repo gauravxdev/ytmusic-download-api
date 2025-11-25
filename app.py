@@ -1,3 +1,55 @@
+"""
+YouTube Music Python REST API
+
+A Flask-based REST API that provides endpoints for searching and streaming YouTube Music content.
+This API combines ytmusicapi for searching and pytubefix for streaming functionality.
+
+Routes Overview:
+================
+
+1. POST /searchandstream
+   - Searches for a song and returns both search results and stream information
+   - Request body: {"song_name": "string", "artist_name": "string" (optional)}
+   - Response: Complete song information with stream URLs and metadata
+   - Use case: When you need immediate streaming capability after search
+
+2. POST /search
+   - Searches for songs and returns clean search results only
+   - Request body: {"song_name": "string", "artist_name": "string" (optional)}
+   - Response: Array of search results with basic metadata (title, video_id, artists, thumbnail)
+   - Use case: When you only need search results for display or selection
+
+3. GET /stream/<video_id>
+   - Gets stream information for a specific YouTube video ID
+   - Path parameter: video_id (YouTube video identifier)
+   - Response: Detailed stream information including all available formats
+   - Use case: When you have a video ID and want to get streaming options
+
+4. GET /dash/<video_id>
+   - Gets DASH audio streams for a specific YouTube video ID
+   - Path parameter: video_id (YouTube video identifier)
+   - Response: DASH-compatible audio streams with adaptive streaming support
+   - Use case: When you need adaptive bitrate streaming capabilities
+
+5. GET /health
+   - Health check endpoint for monitoring API status
+   - Response: Basic status information with timestamp
+   - Use case: API monitoring and health checks
+
+Error Handling:
+===============
+- 400: Bad Request (missing required parameters)
+- 404: Not Found (video not found or no results)
+- 429: Too Many Requests (bot detection)
+- 500: Internal Server Error (processing failed)
+- 503: Service Unavailable (YTMusic service down)
+
+Authentication:
+===============
+This API currently does not require authentication. Consider adding authentication
+for production use to prevent abuse.
+"""
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from ytmusicapi import YTMusic
