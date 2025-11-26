@@ -1,12 +1,16 @@
 # YouTube Music Python REST API
 
-This is a Python Flask REST API for searching YouTube Music and getting streaming URLs. It uses `ytmusicapi` for searching and `pytubefix` for handling streaming URLs with signature cipher decryption.
+A Flask-based REST API that provides comprehensive endpoints for searching and streaming YouTube Music content. This API combines `ytmusicapi` for searching and `pytubefix` for streaming functionality with signature cipher decryption.
 
-**Note:** Search functionality may be limited on cloud hosting platforms due to YouTube API restrictions. The `/stream/{video_id}` endpoint works reliably for known video IDs.
+## Features
 
-**PO Token:** For production deployments, set the `PO_TOKEN` environment variable to bypass YouTube's bot detection. The API also supports automatic PO token generation as a fallback. See pytubefix documentation for obtaining PO tokens.
-
-**Alternative Solutions:** If PO tokens don't work, consider using yt-dlp as a backend or implementing client-side streaming with the YouTube IFrame Player API.
+- **Song Search**: Search YouTube Music database for songs and artists
+- **Stream Extraction**: Get direct streaming URLs for audio playback
+- **Multiple Format Support**: Access various audio formats and qualities
+- **DASH Streaming**: Adaptive bitrate streaming support
+- **Video ID Processing**: Handles standard YouTube IDs and YouTube Music prefixed IDs
+- **Bot Detection Handling**: Automatic PO token generation as fallback
+- **CORS Enabled**: Ready for frontend integration
 
 ## Installation
 
@@ -45,20 +49,10 @@ The app automatically uses the `PORT` environment variable set by the hosting pl
 - `HOST` - Defaults to `0.0.0.0`
 - `PO_TOKEN` - (Optional) PO Token for bypassing YouTube bot detection. See pytubefix documentation for how to obtain.
 
-**Health Check:**
-The `/health` endpoint can be used for monitoring and health checks.
-
-## Video ID Formats
-
-The API accepts various YouTube video ID formats:
-- Standard YouTube video IDs: `dQw4w9WgXcQ`
-- YouTube Music prefixed IDs: `MUSIC_VIDEO_ID_dQw4w9WgXcQ`
-- The API automatically validates and converts IDs to the correct format
-
 ## Endpoints
 
 ### 1. Search and Get Streaming URL
-**Endpoint:** `POST /search_and_stream`
+**Endpoint:** `POST /searchandstream`
 
 Searches for a song on YouTube Music and returns the best quality streaming URL along with metadata and all available formats.
 
@@ -69,7 +63,7 @@ Searches for a song on YouTube Music and returns the best quality streaming URL 
   ```json
   {
     "song_name": "Song Title",
-    "artist_name": "Artist Name"
+    "artist_name": "Artist Name (optional)"
   }
   ```
 
@@ -80,34 +74,75 @@ Searches for a song on YouTube Music and returns the best quality streaming URL 
   "artists": "Artist Name",
   "video_id": "VIDEOID12341234",
   "stream_url": "https://...",
-  "duration": 240,
   "thumbnail": "https://...",
   "quality": "128kbps",
   "bitrate": 128000,
   "codec": "audio/webm",
-  "all_formats": [...],
-  "search_time": 2.15,
-  "stream_time": 1.23,
-  "total_time": 3.38
+  "duration": 240,
+  "all_formats": [
+    {
+      "itag": 140,
+      "quality": "128kbps",
+      "bitrate": 128000,
+      "codec": "audio/mp4",
+      "url": "https://...",
+      "filesize": 3840000
+    }
+  ]
 }
 ```
 
-**Response (503 Service Unavailable) - When YouTube blocks search:**
+**Error Responses:**
+- `400 Bad Request` - Missing song_name parameter
+- `404 Not Found` - No results found or no video ID
+- `429 Too Many Requests` - Bot detection triggered
+- `500 Internal Server Error` - Search or stream extraction failed
+- `503 Service Unavailable` - YTMusic service unavailable
+
+### 2. Search Only
+**Endpoint:** `POST /search`
+
+Searches for songs on YouTube Music and returns clean search results without streaming information.
+
+**Request:**
+- Method: POST
+- Content-Type: application/json
+- Body:
+  ```json
+  {
+    "song_name": "Song Title",
+    "artist_name": "Artist Name (optional)"
+  }
+  ```
+
+**Response (200 OK):**
 ```json
 {
-  "error": "Search temporarily unavailable due to YouTube API restrictions on this server. Please use /stream/{video_id} endpoint with known video IDs.",
-  "code": "SEARCH_BLOCKED"
+  "results": [
+    {
+      "title": "Song Title",
+      "video_id": "VIDEOID12341234",
+      "artists": "Artist Name",
+      "thumbnail": "https://..."
+    }
+  ]
 }
 ```
 
-### 2. Get Streaming URL by Video ID
+**Error Responses:**
+- `400 Bad Request` - Missing song_name parameter
+- `404 Not Found` - No results found
+- `500 Internal Server Error` - Search failed
+- `503 Service Unavailable` - YTMusic service unavailable
+
+### 3. Get Streaming URL by Video ID
 **Endpoint:** `GET /stream/<video_id>`
 
-Gets streaming URLs and audio formats for a specific YouTube video ID.
+Gets streaming URLs and audio formats for a specific YouTube video ID. Supports both standard YouTube IDs and YouTube Music prefixed IDs.
 
 **Request:**
 - Method: GET
-- URL: `http://localhost:5000/stream/VIDEOID12341234`
+- URL: `http://localhost:5000/stream/VIDEOID12341234` or `http://localhost:5000/stream/MUSIC_VIDEO_ID_dQw4w9WgXcQ`
 
 **Response (200 OK):**
 ```json
@@ -123,7 +158,16 @@ Gets streaming URLs and audio formats for a specific YouTube video ID.
     "codec": "audio/webm",
     "filesize": 3840000
   },
-  "all_formats": [...]
+  "all_formats": [
+    {
+      "itag": 140,
+      "quality": "128kbps",
+      "bitrate": 128000,
+      "codec": "audio/mp4",
+      "url": "https://...",
+      "filesize": 3840000
+    }
+  ]
 }
 ```
 
@@ -131,10 +175,11 @@ Gets streaming URLs and audio formats for a specific YouTube video ID.
 - `400 Bad Request` - Invalid video ID format
 - `404 Not Found` - Video not found or no audio streams available
 - `500 Internal Server Error` - Stream extraction failed
-### 3. Get DASH Audio Streams
+
+### 4. Get DASH Audio Streams
 **Endpoint:** `GET /dash/<video_id>`
 
-Gets DASH audio streams for a specific YouTube video ID. DASH streams allow adaptive bitrate streaming.
+Gets DASH audio streams for a specific YouTube video ID. DASH streams allow adaptive bitrate streaming for better quality adaptation.
 
 **Request:**
 - Method: GET
@@ -155,8 +200,7 @@ Gets DASH audio streams for a specific YouTube video ID. DASH streams allow adap
       "codec": "audio/mp4",
       "url": "https://...",
       "filesize": 3840000
-    },
-    ...
+    }
   ]
 }
 ```
@@ -166,53 +210,98 @@ Gets DASH audio streams for a specific YouTube video ID. DASH streams allow adap
 - `404 Not Found` - Video not found or no audio streams available
 - `500 Internal Server Error` - Stream extraction failed
 
-### 3. Get DASH Audio Streams
+### 5. Health Check
+**Endpoint:** `GET /health`
 
-1. Create a new GET request in Postman.
-2. Set method to **GET**.
-3. Enter URL: `http://localhost:5000/dash/YOUR_VIDEO_ID`
-   (Replace YOUR_VIDEO_ID with an actual video ID, e.g., `Ljz0tdAJL-4`)
-4. Click **Send**. You should receive DASH audio streams information.
+Health check endpoint for monitoring API status and service availability.
 
+**Request:**
+- Method: GET
+- URL: `http://localhost:5000/health`
+
+**Response (200 OK):**
+```json
+{
+  "status": "healthy",
+  "timestamp": 1637890123,
+  "service": "yt-music-python-restapi"
+}
+```
+
+## Video ID Formats
+
+The API accepts various YouTube video ID formats:
+- Standard YouTube video IDs: `dQw4w9WgXcQ`
+- YouTube Music prefixed IDs: `MUSIC_VIDEO_ID_dQw4w9WgXcQ`
+- The API automatically validates and converts IDs to the correct format
+
+## Error Handling
+
+The API provides detailed error responses with appropriate HTTP status codes:
+
+- **400 Bad Request**: Missing required parameters or invalid video ID format
+- **404 Not Found**: No search results or video not accessible
+- **429 Too Many Requests**: Bot detection triggered, try again later
+- **500 Internal Server Error**: Stream extraction or processing failed
+- **503 Service Unavailable**: YTMusic service unavailable
 
 ## Testing with Postman
 
-### 1. Search and Get Streaming URL
+### 1. Search and Stream Combined
+1. Create a new POST request in Postman
+2. Set URL: `http://localhost:5000/searchandstream`
+3. Go to Headers tab, add:
+   - Key: `Content-Type`, Value: `application/json`
+4. Go to Body tab, select raw and JSON, enter:
+   ```json
+   {
+     "song_name": "Khuda bhi Jab",
+     "artist_name": "Ankit Tiwari"
+   }
+   ```
+5. Click Send
 
-1. Open Postman and create a new request.
-2. Set method to **POST**.
-3. Enter URL: `http://localhost:5000/search_and_stream`
-4. Go to Headers tab:
-   - Key: `Content-Type`
-   - Value: `application/json`
-5. Go to Body tab:
-   - Select raw
-   - Select JSON
-   - Enter:
-     ```json
-     {
-       "song_name": "Khuda bhi Jab",
-       "artist_name": "Ankit Tiwari"
-     }
-     ```
-6. Click **Send**. You should receive a JSON response with the streaming URL and metadata.
+### 2. Search Only
+1. Create a new POST request in Postman
+2. Set URL: `http://localhost:5000/search`
+3. Configure headers and body the same as above
+4. Click Send
 
-### 2. Get Streaming URL by Video ID
+### 3. Get Stream by Video ID
+1. Create a new GET request in Postman
+2. Set URL: `http://localhost:5000/stream/Ljz0tdAJL-4`
+3. Click Send
 
-1. Create a new GET request in Postman.
-2. Set method to **GET**.
-3. Enter URL: `http://localhost:5000/stream/YOUR_VIDEO_ID`
-   (Replace YOUR_VIDEO_ID with an actual video ID, e.g., `Ljz0tdAJL-4`)
-4. Click **Send**. You should receive streaming URLs and format information.
+### 4. Get DASH Audio Streams
+1. Create a new GET request in Postman
+2. Set URL: `http://localhost:5000/dash/Ljz0tdAJL-4`
+3. Click Send
+
+### 5. Health Check
+1. Create a new GET request in Postman
+2. Set URL: `http://localhost:5000/health`
+3. Click Send
 
 ## Dependencies
 
-- Flask: Web framework
-- ytmusicapi: YouTube Music API for searching
-- pytubefix: Modified pytube for handling YouTube streams including signature cipher
+- **Flask**: Web framework for building the REST API
+- **flask-cors**: Cross-Origin Resource Sharing support
+- **ytmusicapi**: YouTube Music API for searching songs and artists
+- **pytubefix**: Modified pytube for handling YouTube streams including signature cipher decryption
+
+## Key Features
+
+- **Working Streaming URLs**: All returned URLs can be used directly for audio playback
+- **Multiple Format Support**: Returns all available audio formats for advanced use cases
+- **Performance Metrics**: Includes timing information in search responses
+- **Bot Detection Handling**: Automatic fallback for YouTube's bot detection
+- **Video ID Validation**: Automatic conversion of various YouTube ID formats
+- **DASH Streaming Support**: Adaptive bitrate streaming capabilities
+- **Health Monitoring**: Built-in health check endpoint for deployment monitoring
 
 ## Notes
 
-- The API returns working streaming URLs that can be used directly for audio playback.
-- All available audio formats are included in the response for more advanced use cases.
-- Performance metrics (search time, stream extraction time) are included in search responses.
+- The API returns direct streaming URLs that can be used immediately for audio playback
+- Search functionality may be limited on some cloud hosting platforms due to YouTube API restrictions
+- For production deployments, consider setting the `PO_TOKEN` environment variable to bypass bot detection
+- The `/stream/<video_id>` endpoint works reliably for known video IDs even when search is restricted
